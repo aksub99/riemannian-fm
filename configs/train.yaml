@@ -30,9 +30,18 @@ mesh:
   atol: 1e-5
   rtol: 1e-5
 
-model:
+model_aa:
   d_model: 512
   num_layers: 8
+  actfn: swish
+  fourier: null
+  atol: 1e-7
+  rtol: 1e-7
+  metric_normalize: False
+
+model_cg:
+  d_model: 256
+  num_layers: 6
   actfn: swish
   fourier: null
   atol: 1e-7
