@@ -3,6 +3,7 @@
 import torch
 from tqdm import tqdm
 from manifm.manifolds import Euclidean
+from flowmm.rfm.manifolds.flat_torus import FlatTorus01
 
 
 @torch.no_grad()
@@ -35,6 +36,79 @@ def projx_integrator(
         xts.append(xt)
     vts.append(odefunc(t1, xt))
     return torch.stack(xts), torch.stack(vts)
+
+@torch.no_grad()
+def projx_integrator_return_last_x1_prediction_residual(
+    manifold, odefunc, x0, t, method="euler", projx=True, local_coords=False, pbar=False, cg_feats_expanded=None, dims=None,
+):
+    """Has a lower memory cost since this doesn't store intermediate values."""
+
+    step_fn = {
+        "euler": euler_step,
+        "midpoint": midpoint_step,
+        "rk4": rk4_step,
+    }[method]
+
+    xt = x0
+
+    t0s = t[:-1]
+    if pbar:
+        t0s = tqdm(t0s)
+
+    x1_pred = odefunc(t[:-1][0], xt)
+    x1_pred[:, dims.a:-dims.l] = FlatTorus01.expmap(cg_feats_expanded, x1_pred[:, dims.a:-dims.l])
+    import pdb; pdb.set_trace()
+    return manifold.projx(x1_pred)
+    for t0, t1 in zip(t0s, t[1:]):
+        dt = t1 - t0
+        x1_pred = odefunc(t0, xt)
+        x1_pred[:, dims.a:-dims.l] = FlatTorus01.expmap(cg_feats_expanded, x1_pred[:, dims.a:-dims.l])
+        x1_pred[:, :dims.a] = xt[:, :dims.a]
+        x1_pred[:, -dims.l:] = xt[:, -dims.l:]
+
+        vt = (x1_pred - xt)
+        xt = step_fn(
+            odefunc, xt, vt, t0, dt, manifold=manifold if local_coords else None
+        )
+        if projx:
+            xt = manifold.projx(xt)
+    return xt
+
+
+@torch.no_grad()
+def projx_integrator_return_last_x1_prediction(
+    manifold, odefunc, x0, t, method="euler", projx=True, local_coords=False, pbar=False, dims=None,
+):
+    """Has a lower memory cost since this doesn't store intermediate values."""
+
+    step_fn = {
+        "euler": euler_step,
+        "midpoint": midpoint_step,
+        "rk4": rk4_step,
+    }[method]
+
+    xt = x0
+
+    t0s = t[:-1]
+    if pbar:
+        t0s = tqdm(t0s)
+
+    return manifold.projx(odefunc(t[:-1][0], xt))
+    for t0, t1 in zip(t0s, t[1:]):
+        dt = t1 - t0
+        # import pdb; pdb.set_trace()
+        x1_pred = odefunc(t0, xt)
+        x1_pred[:, :dims.a] = xt[:, :dims.a]
+        x1_pred[:, -dims.l:] = xt[:, -dims.l:]
+        vt = (x1_pred - xt)
+        # vt = manifold.cond_u(xt, x1_pred, )
+        # vt = (x1_pred - xt)/(1 - )
+        xt = step_fn(
+            odefunc, xt, vt, t0, dt, manifold=manifold if local_coords else None
+        )
+        if projx:
+            xt = manifold.projx(xt)
+    return xt
 
 
 @torch.no_grad()
