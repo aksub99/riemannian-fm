@@ -66,6 +66,35 @@ def projx_integrator_return_last(
     return xt
 
 
+@torch.no_grad()
+def projx_integrator_return_last_x1_pred(
+    manifold, odefunc, x0, t, method="euler", projx=True, local_coords=False, pbar=False
+):
+    """Has a lower memory cost since this doesn't store intermediate values."""
+
+    step_fn = {
+        "euler": euler_step,
+        "midpoint": midpoint_step,
+        "rk4": rk4_step,
+    }[method]
+
+    xt = x0
+
+    t0s = t[:-1]
+    if pbar:
+        t0s = tqdm(t0s)
+
+    for t0, t1 in zip(t0s, t[1:]):
+        dt = t1 - t0
+        vt = (odefunc(t0, xt) - t0) / (1 - t0)
+        xt = step_fn(
+            odefunc, xt, vt, t0, dt, manifold=manifold if local_coords else None
+        )
+        if projx:
+            xt = manifold.projx(xt)
+    return xt
+
+
 def euler_step(odefunc, xt, vt, t0, dt, manifold=None):
     if manifold is not None:
         return manifold.expmap(xt, dt * vt)
